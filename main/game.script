@@ -1,0 +1,102 @@
+local Deck = require('main.deck.deck')
+local Player = require('main.player.player')
+
+function init(self)
+	print('init')
+	-- Сажаем семечки ^_^
+	math.randomseed(100000 * (socket.gettime() % 1))
+	msg.post(".", "acquire_input_focus")
+
+	-- Создаем колоду карт и игроков
+	self.deck = {}
+	self.botA = Player.create('Bot A')
+	self.botB = Player.create('Bot B')
+
+	-- Начало раунда
+	start_round(self)
+end
+
+function start_round(self)
+	print('*********************************************')
+	print('*********  S T A R T    R O U N D  **********')
+	print('*********************************************')
+	-- Обновляем колоду
+	self.deck = Deck.create()
+
+	-- Сбрасываем икгрокам счет и движение
+	self.botA = Player.reset(self.botA)
+	self.botB = Player.reset(self.botB)
+	
+	-- ход БотА.
+	local botA_result = loop_move(self, self.botA)
+	print('botA total: ', botA_result)
+
+	-- Если кол-во очков больше 21, проигрыш
+	if botA_result > 21 then
+		-- Показываем победителя
+		self.botB.won_rounds = self.botB.won_rounds + 1
+		show_winner(self, self.botB)
+		return
+	end
+
+	-- ход БотB.
+	local botB_result = loop_move(self, self.botB)
+	print('botB total: ', botB_result)
+	
+	-- Если кол-во очеков больше 21, проигрыш
+	if botB_result > 21 then
+		-- Показываем победителя
+		self.botA.won_rounds = self.botA.won_rounds + 1
+		show_winner(self, self.botA)
+		return
+	end
+
+	-- Если у обоих ботов одинаковое кол-во очков
+	if botA_result == botB_result then
+		self.botA.won_rounds = self.botA.won_rounds + 1
+		self.botB.won_rounds = self.botB.won_rounds + 1
+		show_winner(self)
+	end
+
+	-- Если у обоих ботов очки <=21 сравниваем у кого больше
+	if botA_result > botB_result then
+		self.botA.won_rounds = self.botA.won_rounds + 1
+		show_winner(self, self.botA)
+	else
+		self.botB.won_rounds = self.botB.won_rounds + 1
+		show_winner(self, self.botB)
+	end
+end
+
+function loop_move(self, bot)
+	-- В цикле бот берёт одну карту, приплюсовывает к счету и решает - брать ещё или нет
+	while bot.is_moving == 1 do
+		local card = Deck.get_card(self.deck)
+		bot.current_score = Player.add_score(bot, card)
+		bot.is_moving = Player.make_decision(bot)
+		print(bot.name, 'get card', card)
+	end
+
+	return bot.current_score
+end
+
+function show_winner(self, bot)
+	-- Если есть второй аргумент, значит есть победитель, иначе Ничья
+	if bot then
+		print('winner: ', bot.name)
+	else
+		print('*** D R A W ***')
+	end
+	
+	print('Scores: ', self.botA.name, '=', self.botA.won_rounds, '**', self.botB.name, '=', self.botB.won_rounds)
+	print('*****************************************')
+	print('*********  E N D    R O U N D  **********')
+	print('*****************************************')
+end
+
+function on_input(self, action_id, action)
+	if action_id == hash('touch') and action.pressed then
+		-- Рестарт раунда
+		start_round(self)
+	end
+end
